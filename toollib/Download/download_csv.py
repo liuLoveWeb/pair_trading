@@ -2,6 +2,8 @@ import urllib
 import urllib.request
 import os
 import csv
+import progressbar
+from time import sleep
 from datetime import datetime
 DT_FORMAT = "%Y-%m-%d"
 min_size = 200000
@@ -30,7 +32,7 @@ def format_file(symbol):
             for lastrow in csv.reader(inp): pass
             if(datetime.strptime(lastrow[0], DT_FORMAT)>START_DATE):
                 os.remove('csv/daily/'+symbol+'.csv')
-                print("File Removed!",'  csv/daily/'+symbol+'.csv')
+                print("File Removed!",'  '+'csv/daily/'+symbol+'.csv')
                 return False
             inp.seek(0)
             for row in csv.reader(inp):
@@ -52,15 +54,15 @@ def format_file(symbol):
         pass
 
     os.remove('csv/daily/' + symbol + '.csv')
-    print("File Removed!", '  csv/daily/' + symbol + '.csv')
+    print("File Removed!", '  '+'csv/daily/' + symbol + '.csv')
     print('Caught this error: format is not correct')
     return False
 
 def checkFileSize(symbol):
     try:
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-        statinfo = os.path.getsize(dir_path+'/csv/daily/' + symbol +'.csv')
-        print(dir_path+'/csv/daily/' + symbol +'.csv :'+statinfo.__str__())
+        #dir_path = os.path.dirname(os.path.realpath(__file__))
+        statinfo = os.path.getsize('csv/daily/' + symbol +'.csv')
+        print('csv/daily/' + symbol +'.csv :'+statinfo.__str__())
         if(statinfo <= min_size) or (statinfo >= max_size):
             return False
         else:
@@ -110,15 +112,23 @@ def download():
                     'WBA', 'DIS', 'WM', 'WAT', 'ANTM', 'WFC', 'WDC', 'WU', 'WY', 'WHR', 'WFM', 'WMB', 'WEC', 'WYN',
                     'WYNN', 'XEL', 'XRX', 'XLNX', 'XL', 'XYL', 'YHOO', 'YUM', 'ZBH', 'ZION', 'ZTS']
 
-    try:
-        for symbol in SP500_symbol:
 
+    bar = progressbar.ProgressBar(maxval=len(SP500_symbol), \
+                                  widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
+    try:
+        i = 0
+        bar.start()
+        for symbol in SP500_symbol:
+            bar.update(i + 1)
+            sleep(0.1)
             if not checkFileSize(symbol):
                 _request_csv(symbol,'TIME_SERIES_DAILY_ADJUSTED')
                 format_file(symbol)
             else:
+                i = i + 1
                 continue
-
+            i = i + 1
+        bar.finish()
     except Exception as error:
         print('Caught this error1: ' + repr(error))
-download()
+

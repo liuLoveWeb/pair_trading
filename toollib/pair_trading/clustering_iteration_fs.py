@@ -34,7 +34,8 @@ import datetime as dt
 
 N_PRIN_COMPONENTS = 12
 SYMBOL = 'SPY'
-pathname = '../constituents.csv'
+
+pathname = 'doc/constituents.csv'
 
 
 def initialize(context):
@@ -275,7 +276,7 @@ def create_model(context, data):
             textcoords='offset points', ha='right', va='bottom',
             bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5))
     plt.show()
-    fig.savefig('../output_img/fs_1.png')
+    fig.savefig('output_img/fs_1.png')
 
 
     print(label_list_2)
@@ -299,7 +300,7 @@ def create_model(context, data):
             textcoords='offset points', ha='right', va='bottom',
             bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5))
     plt.show()
-    fig.savefig('../output_img/fs_2.png')
+    fig.savefig('output_img/fs_2.png')
 
     max_list = getMaxVolumeInClusters(n_clusters_, cluster, info)
     print(max_list)

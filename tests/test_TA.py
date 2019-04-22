@@ -1,27 +1,17 @@
 """
 This is a template algorithm on Quantopian for you to adapt and fill in.
 """
-import TA_indicator
-from zipline.api import (history,order, record, symbol,order_target_percent,set_benchmark,set_long_only,schedule_function,sid,date_rules,time_rules)
+from toollib.TA.TA_indicator import TA
+from zipline.api import (symbol, set_benchmark, set_long_only, schedule_function, date_rules, time_rules)
 from zipline import run_algorithm
-import os.path
-import math
-import numpy as np
 # Pandas library: https://pandas.pydata.org/
 import pandas as pd
-from sklearn import preprocessing
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
-import urllib
-from io import StringIO
-import csv
-import datetime as dt
+
 MODEL_NAME = ''
 SYMBOL = ''
 def initialize(context):
@@ -73,15 +63,16 @@ def rebalance(context, data):
     recent_prices = data.history(context.security, 'price', context.lookback + 1, '1d').values
     recent_volume = data.history(context.security, 'volume', context.lookback + 1, '1d').values
     recent_dates = data.history(context.security, 'price', context.lookback + 1, '1d').index
-    recent_high = data.history(context.security, 'high', context.history_range, '1d').values
-    recent_low = data.history(context.security, 'low', context.history_range, '1d').values
+    recent_high = data.history(context.security, 'high', context.lookback + 1, '1d').values
+    recent_low = data.history(context.security, 'low', context.lookback + 1, '1d').values
+
     if(context.init == 0):
-        ta_ = TA_indicator.TA(recent_dates,recent_high,recent_low,recent_prices,recent_volume)
+        ta_ = TA(recent_dates)
         context.time_series = ta_
         context.init = 1
     else:
         context.time_series.appendDate(recent_dates)
-    context.time_series.calcMA(recent_dates,recent_prices)
+    context.time_series.addFeature(['PM','EMA','OBV', 'MA', 'MACD','STOCH', 'CCI', 'AD'], recent_dates, recent_prices, recent_volume, recent_high, recent_low)
     print(context.time_series.training_window)
 
 

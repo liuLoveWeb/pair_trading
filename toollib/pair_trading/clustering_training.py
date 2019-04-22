@@ -3,7 +3,6 @@ This is a template algorithm on Quantopian for you to adapt and fill in.
 """
 from zipline.api import (history,order, record, symbol,order_target_percent,set_benchmark,set_long_only,schedule_function,sid,date_rules,time_rules)
 from zipline import run_algorithm
-import os.path
 import math
 import numpy as np
 # Pandas library: https://pandas.pydata.org/
@@ -17,33 +16,77 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
+from sklearn.decomposition import PCA
+from talib import RSI, BBANDS, OBV, EMA, MA, MACD, STOCH, CCI, AD
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
-from talib import RSI, BBANDS, OBV, EMA, MA, MACD,STOCH, CCI, AD
+from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
+import numpy as np
 import urllib
 from io import StringIO
 import csv
 import datetime as dt
-MODEL_NAME = ''
-SYMBOL = ''
+N_PRIN_COMPONENTS = 12
+SYMBOL = 'SPY'
+pathname = 'constituents.csv'
 def initialize(context):
     """
     Called once at the start of the algorithm.
     """
-    feature_num = 11
+    feature_num = 14
     context.orders_submitted = False
     large_num = 9999999
     least_num = 0
-    context.n_components = feature_num
-    context.security = symbol(SYMBOL)  # Trade SPY
-    set_benchmark(symbol(SYMBOL))  # Set benchmarks
+    context.n_components = 11
+    context.n_components = 6
+    context.SP500_symbol = ['AAPL', 'ABT', 'ABBV', 'ACN', 'ACE', 'ADBE', 'ADT', 'AAP', 'AES', 'AET', 'AFL',
+                    'AMG', 'A', 'GAS', 'ARE', 'APD', 'AKAM', 'AA', 'AGN', 'ALXN', 'ALLE', 'ADS', 'ALL', 'ALTR', 'MO',
+                    'AMZN', 'AEE', 'AAL', 'AEP', 'AXP', 'AIG', 'AMT', 'AMP', 'ABC', 'AME', 'AMGN', 'APH', 'APC', 'ADI',
+                    'AON', 'APA', 'AIV', 'AMAT', 'ADM', 'AIZ', 'T', 'ADSK', 'ADP', 'AN', 'AZO', 'AVGO', 'AVB', 'AVY',
+                    'BHI', 'BLL', 'BAC', 'BK', 'BCR', 'BXLT', 'BAX', 'BBT', 'BDX', 'BBBY', 'BRK.B', 'BBY', 'BLX', 'HRB',
+                    'BA', 'BWA', 'BXP', 'BSX', 'BMY', 'BRCM', 'BF.B', 'CHRW', 'CA', 'CVC', 'COG', 'CAM', 'CPB', 'COF',
+                    'CAH', 'HSIC', 'KMX', 'CCL', 'CAT', 'CBG', 'CBS', 'CELG', 'CNP', 'CTL', 'CERN', 'CF', 'SCHW', 'CHK',
+                    'CVX', 'CMG', 'CB', 'CI', 'XEC', 'CINF', 'CTAS', 'CSCO', 'C', 'CTXS', 'CLX', 'CME', 'CMS', 'COH',
+                    'KO', 'CCE', 'CTSH', 'CL', 'CMCSA', 'CMA', 'CSC', 'CAG', 'COP', 'CNX', 'ED', 'STZ', 'GLW', 'COST',
+                    'CCI', 'CSX', 'CMI', 'CVS', 'DHI', 'DHR', 'DRI', 'DVA', 'DE', 'DLPH', 'DAL', 'XRAY', 'DVN', 'DO',
+                    'DTV', 'DFS', 'DISCA', 'DISCK', 'DG', 'DLTR', 'D', 'DOV', 'DOW', 'DPS', 'DTE', 'DD', 'DUK', 'DNB',
+                    'ETFC', 'EMN', 'ETN', 'EBAY', 'ECL', 'EIX', 'EW', 'EA', 'EMC', 'EMR', 'ENDP', 'ESV', 'ETR', 'EOG',
+                    'EQT', 'EFX', 'EQIX', 'EQR', 'ESS', 'EL', 'ES', 'EXC', 'EXPE', 'EXPD', 'ESRX', 'XOM', 'FFIV', 'FB',
+                    'FAST', 'FDX', 'FIS', 'FITB', 'FSLR', 'FE', 'FISV', 'FLIR', 'FLS', 'FLR', 'FMC', 'FTI', 'F', 'FOSL',
+                    'BEN', 'FCX', 'FTR', 'GME', 'GPS', 'GRMN', 'GD', 'GE', 'GGP', 'GIS', 'GM', 'GPC', 'GNW', 'GILD',
+                    'GS', 'GT', 'GOOGL', 'GOOG', 'GWW', 'HAL', 'HBI', 'HOG', 'HAR', 'HRS', 'HIG', 'HAS', 'HCA', 'HCP',
+                    'HCN', 'HP', 'HES', 'HPQ', 'HD', 'HON', 'HRL', 'HSP', 'HST', 'HCBK', 'HUM', 'HBAN', 'ITW', 'IR',
+                    'INTC', 'ICE', 'IBM', 'IP', 'IPG', 'IFF', 'INTU', 'ISRG', 'IVZ', 'IRM', 'JEC', 'JBHT', 'JNJ', 'JCI',
+                    'JOY', 'JPM', 'JNPR', 'KSU', 'K', 'KEY', 'GMCR', 'KMB', 'KIM', 'KMI', 'KLAC', 'KSS', 'KRFT', 'KR',
+                    'LB', 'LLL', 'LH', 'LRCX', 'LM', 'LEG', 'LEN', 'LVLT', 'LUK', 'LLY', 'LNC', 'LLTC', 'LMT', 'L',
+                    'LOW', 'LYB', 'MTB', 'MAC', 'M', 'MNK', 'MRO', 'MPC', 'MAR', 'MMC', 'MLM', 'MAS', 'MA', 'MAT',
+                    'MKC', 'MCD', 'MCK', 'MJN', 'MMV', 'MDT', 'MRK', 'MET', 'KORS', 'MCHP', 'MU', 'MSFT', 'MHK', 'TAP',
+                    'MDLZ', 'MON', 'MNST', 'MCO', 'MS', 'MOS', 'MSI', 'MUR', 'MYL', 'NDAQ', 'NOV', 'NAVI', 'NTAP',
+                    'NFLX', 'NWL', 'NFX', 'NEM', 'NWSA', 'NEE', 'NLSN', 'NKE', 'NI', 'NE', 'NBL', 'JWN', 'NSC', 'NTRS',
+                    'NOC', 'NRG', 'NUE', 'NVDA', 'ORLY', 'OXY', 'OMC', 'OKE', 'ORCL', 'OI', 'PCAR', 'PLL', 'PH', 'PDCO',
+                    'PAYX', 'PNR', 'PBCT', 'POM', 'PEP', 'PKI', 'PRGO', 'PFE', 'PCG', 'PM', 'PSX', 'PNW', 'PXD', 'PBI',
+                    'PCL', 'PNC', 'RL', 'PPG', 'PPL', 'PX', 'PCP', 'PCLN', 'PFG', 'PG', 'PGR', 'PLD', 'PRU', 'PEG',
+                    'PSA', 'PHM', 'PVH', 'QRVO', 'PWR', 'QCOM', 'DGX', 'RRC', 'RTN', 'O', 'RHT', 'REGN', 'RF', 'RSG',
+                    'RAI', 'RHI', 'ROK', 'COL', 'ROP', 'ROST', 'RLD', 'R', 'CRM', 'SNDK', 'SCG', 'SLB', 'SNI', 'STX',
+                    'SEE', 'SRE', 'SHW', 'SPG', 'SWKS', 'SLG', 'SJM', 'SNA', 'SO', 'LUV', 'SWN', 'SE', 'STJ', 'SWK',
+                    'SPLS', 'SBUX', 'HOT', 'STT', 'SRCL', 'SYK', 'STI', 'SYMC', 'SYY', 'TROW', 'TGT', 'TEL', 'TE',
+                    'TGNA', 'THC', 'TDC', 'TSO', 'TXN', 'TXT', 'HSY', 'TRV', 'TMO', 'TIF', 'TWX', 'TWC', 'TJX', 'TMK',
+                    'TSS', 'TSCO', 'RIG', 'TRIP', 'FOXA', 'TSN', 'TYC', 'UA', 'UNP', 'UNH', 'UPS', 'URI', 'UTX', 'UHS',
+                    'UNM', 'URBN', 'VFC', 'VLO', 'VAR', 'VTR', 'VRSN', 'VZ', 'VRTX', 'VIAB', 'V', 'VNO', 'VMC', 'WMT',
+                    'WBA', 'DIS', 'WM', 'WAT', 'ANTM', 'WFC', 'WDC', 'WU', 'WY', 'WHR', 'WFM', 'WMB', 'WEC', 'WYN',
+                    'WYNN', 'XEL', 'XRX', 'XLNX', 'XL', 'XYL', 'YHOO', 'YUM', 'ZBH', 'ZION', 'ZTS']
+    #context.security = symbol(SYMBOL)  # Trade SPY
+    #set_benchmark(symbol(SYMBOL))  # Set benchmarks
+    context.times = 0
     context.model2 = SVC(kernel='rbf', tol=1e-3, random_state=0, gamma=0.2, C=10.0, verbose=True)  # 8.05 for SVM model
     context.model3 = KNeighborsClassifier(n_neighbors=feature_num, p=3, metric='minkowski')  # 7.05 for  model
     context.model = DecisionTreeClassifier(criterion='entropy', max_depth=feature_num, random_state=0)
     context.model4 = RandomForestClassifier(criterion='entropy', n_estimators=feature_num, random_state=1,
                                             n_jobs=2)  # 5.2 for randomforest
     context.model1 = LogisticRegression(random_state=0, solver='lbfgs', multi_class='multinomial')
-    context.modellist = {'SVM':context.model2,'KNeighbors':context.model3,'DecisionTree':context.model,'RandomForest':context.model4,'LogisticRegression':context.model1}
+    context.model_clustering = DBSCAN(eps=0.2, min_samples=3, metric='euclidean')
+    context.sector = readCSV(pathname)
     context.lookback = 350  # Look back 62 days
     context.history_range = 350  # Only consider the past 400 days' history
     context.threshold = 4.05
@@ -64,24 +107,146 @@ def handle_data(context, data):
     pass
 def create_model(context, data):
     # Get the relevant daily prices
-    model = context.modellist[MODEL_NAME]
-    recent_prices = data.history(context.security, 'price', context.history_range, '1d').values
-    recent_volume = data.history(context.security, 'volume', context.history_range, '1d').values
-    recent_high = data.history(context.security, 'high', context.history_range, '1d').values
-    recent_low = data.history(context.security, 'low', context.history_range, '1d').values
+    if(context.times == 0):
+        create_model_clustering(context, data)
 
-    train_, target_ = getTrainingWindow(recent_high,recent_low,recent_prices, recent_volume)
-    X_normalized_ = preprocessing.normalize(train_, norm='l2')
-    y = np.delete(target_, 0, 1)
-    y = np.ravel(y)
-    sc = preprocessing.MinMaxScaler()
-    sc.fit(X_normalized_)
-    X_std = sc.transform(X_normalized_)
-    # feature selection to input features (context.n_components)
-    X_new = SelectKBest(chi2, k=context.n_components).fit_transform(X_std, y)
-    X_train, y_train = X_new, y
-    model.fit(X_train, y_train)
+#create clustering model
+def create_model_clustering(context, data):
+    X = {}
+    print("test")
+    info = []
+    id = 0
+    sectors = iterateCreateID(context.sector)
+    for symbol_ in context.SP500_symbol:
+        try:
+            recent_prices = data.history(symbol(symbol_), 'price', context.history_range, '1d').values
+            recent_volume = data.history(symbol(symbol_), 'volume', context.history_range, '1d').values
+            recent_high = data.history(symbol(symbol_), 'high', context.history_range, '1d').values
+            recent_low = data.history(symbol(symbol_), 'low', context.history_range, '1d').values
+            info.append({'vol': sum(recent_volume) / context.history_range, 'stock': symbol_})
+	#get the moving training window
+            train_, target_ = getTrainingWindow(recent_high, recent_low, recent_prices, recent_volume, sectors[symbol_])
+            X_normalized_ = preprocessing.normalize(train_, norm='l2')
+            y = np.delete(target_, 0, 1)
+            y = np.ravel(y)
+            sc = preprocessing.MinMaxScaler()
+            sc.fit(X_normalized_)
+            X_std = sc.transform(X_normalized_)
+	# feature selection to input features (N_PRIN_COMPONENTS)
+            X_new = SelectKBest(chi2, k=N_PRIN_COMPONENTS).fit_transform(X_std, y)
+            X_train, y_train = X_new, y
+            X[symbol_] = []
+            X[symbol_].append(X_train)
+        except Exception as error:
+            pass
+        id = id + 1
+    # print(info[0]['stock'])
+    train_1 = []
+    label = []
+    for symbol_ in context.SP500_symbol:
+        try:
 
+            X_perstock = (X[symbol_][0]).T
+
+            pca_1 = PCA(n_components=1)
+            X_pca_per_stock = pca_1.fit_transform(X_perstock)
+            # print(X_pca_per_stock.T[0])
+            label.append(symbol_)
+            train_1.append(X_pca_per_stock.T[0])
+        except Exception as error:
+            pass
+    # print(train_1)
+    X_normalized_1 = preprocessing.normalize(train_1, norm='l2')
+    sc = StandardScaler()
+    sc.fit(X_normalized_1)
+    X_std_1 = sc.transform(X_normalized_1)
+    print(X_std_1)
+# DBScan clustering model
+    y_pred = context.model_clustering.fit_predict(X_std_1)
+    labels = context.model_clustering.labels_
+    n_clusters_ = len(set(labels))
+    print("Clusters discovered: ", n_clusters_)
+    # print(X_perday)
+# list the label of clusters
+    label_list = unique(y_pred)
+    print(label_list)
+    pca = PCA(n_components=2)
+    cluster = []
+    X_axis = pca.fit_transform(X_std_1)
+    X_axis = np.array(X_axis)
+    fig = plt.figure()
+#scatter plot clusters
+    for y_i in label_list:
+        color = np.random.rand(3, )
+        print(color)
+        plt.scatter(X_axis[y_pred == y_i, 0], X_axis[y_pred == y_i, 1], c=color, marker='o', s=40)
+        plt.suptitle('the number of clusters: ' + str(n_clusters_))
+        plt.xlabel('pca_feature_1')
+        plt.ylabel('pca_feature_2')
+        cluster.append(np.where(y_pred == y_i))
+
+    for j in range(0, len(y_pred), 20):
+        plt.annotate(
+            label[j],
+            xy=(X_axis[j, 0], X_axis[j, 1]), xytext=(-0.2, 0.2),
+            textcoords='offset points', ha='right', va='bottom',
+            bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5))
+    plt.show()
+    fig.savefig('output_img/pca_cluster.png')
+
+    max_list = []
+    print(cluster[0])
+    for k in range(n_clusters_):
+        max_value = 0
+        max_stock = ''
+        for ele in (cluster[k][0]):
+            print(info[ele]['vol'])
+            avg_vol = float(info[ele]['vol'])
+            if (avg_vol > max_value):
+                max_value = avg_vol
+                max_stock = info[ele]['stock']
+        max_list.append(max_stock)
+    print(max_list)
+    context.times = context.times + 1
+    return max_list
+
+#create dictionary for sectors, read sectors from csv
+def readCSV(pathname):
+    n = 0
+    mydict = {}
+    with open(pathname, mode='r') as infile:
+        reader = csv.reader(infile)
+        for rows in reader:
+            if not n == 0:
+                mydict[rows[0]] = rows[2]
+            else:
+                n = 1
+    return mydict
+
+def unique(list1):
+    # intilize a null list
+    unique_list = []
+
+    # traverse for all elements
+    for x in list1:
+        # check if exists in unique_list or not
+        if x not in unique_list:
+            unique_list.append(x)
+    return unique_list
+
+#create new id for new clusters
+def iterateCreateID(namelist):
+    idDict = {}
+    valDict = {}
+    id = 0
+    for key, value in namelist.items():
+        if value in valDict:
+            idDict[key] = valDict[value]
+        else:
+            valDict[value] = id
+            idDict[key] = id
+            id = id + 1
+    return idDict
 
 def getMA(price):
     date = 1
@@ -118,25 +283,28 @@ def getPVO(volume):
     # print(PVO)
     return PVO
 
-def getSTOCH(high,low,price):
+
+def getSTOCH(high, low, price):
     date = 1
     STOCH_ = []
-    fastk, fastd = STOCH(high,low,price)
+    fastk, fastd = STOCH(high, low, price)
     for ele, ele1 in zip(fastk, fastd):
         STOCH_.append([date, ele, ele1])
         date = date + 1
     return STOCH_
 
+
 def getMACD(price):
     date = 1
     MACD_ = []
     macd, macdsignal, macdhist = MACD(price)
-    for ele,ele1,ele2 in zip(macd, macdsignal, macdhist):
-        MACD_.append([date, ele,ele1,ele2])
+    for ele, ele1, ele2 in zip(macd, macdsignal, macdhist):
+        MACD_.append([date, ele, ele1, ele2])
         date = date + 1
     return MACD_
 
-def getCCI(high,low,price):
+
+def getCCI(high, low, price):
     date = 1
     CCI_ = []
     real = CCI(high, low, price)
@@ -144,6 +312,7 @@ def getCCI(high,low,price):
         CCI_.append([date, ele])
         date = date + 1
     return CCI_
+
 
 def getPM(price):
     date = 1
@@ -225,7 +394,8 @@ def getPM(price):
 
     return PM
 
-def getAD(high,low,price,volume):
+
+def getAD(high, low, price, volume):
     date = 1
     AD_ = []
     real = AD(high, low, price, volume)
@@ -233,6 +403,7 @@ def getAD(high,low,price,volume):
         AD_.append([date, ele])
         date = date + 1
     return AD_
+
 
 def getOBV(price, volume):
     date = 1
@@ -253,6 +424,7 @@ def getRSI(price):
         date = date + 1
     return RSI_
 
+
 def getSector(length, sector):
     date = 1
     Sector_ = []
@@ -261,6 +433,7 @@ def getSector(length, sector):
         date = date + 1
     return Sector_
 
+#merge two matrice to one in x axis
 def mergeMatrice(Matrix_A, Matrix_B):
     return np.concatenate((np.delete(Matrix_A, 0, 1), np.delete(Matrix_B, 0, 1)), axis=1)
 
@@ -271,7 +444,6 @@ def getTarget(price, threshold, horizon):
     price_prev = 0
     labeled_target = []
     for data in price:
-        # print(data)
         if (math.isnan(data)):
             continue
         # price change: one day ratio
@@ -313,7 +485,7 @@ def getTarget(price, threshold, horizon):
     return labeled_target
 
 
-def getTrainingWindow(high, low, prices, volume):
+def getTrainingWindow(high, low, prices, volume, sector):
     # Query historical pricing data
     date = 1
     MA_ = getMA(prices)
@@ -324,13 +496,12 @@ def getTrainingWindow(high, low, prices, volume):
     STOCH_ = getSTOCH(high, low, prices)
     MACD_ = getMACD(prices)
     CCI_ = getCCI(high, low, prices)
-    AD_ = getAD(high, low, prices,volume)
-
+    AD_ = getAD(high, low, prices, volume)
 
     input_data_set_0 = mergeMatrice(MA_, PM_)
     input_data_set_1 = mergeMatrice(input_data_set_0, OBV_)
     input_data_set_6 = mergeMatrice(input_data_set_1, RSI_)
-    input_data_set_2 = mergeMatrice(input_data_set_6,PVO_)
+    input_data_set_2 = mergeMatrice(input_data_set_6, PVO_)
     input_data_set_3 = mergeMatrice(input_data_set_2, STOCH_)
     input_data_set_4 = mergeMatrice(input_data_set_3, MACD_)
     input_data_set_5 = mergeMatrice(input_data_set_4, CCI_)
@@ -345,68 +516,15 @@ def getTrainingWindow(high, low, prices, volume):
             tar = np.delete(tar, date - 1, 0)
         else:
             date = date + 1
-
+    Sector_ = getSector(len(input_data_set), sector)
+    input_data_set = mergeMatrice(input_data_set, Sector_)
     return input_data_set, tar
-
 
 def rebalance(context, data):
     """
     Execute orders according to our schedule_function() timing.
     """
-    # Get recent prices
-    model = context.modellist[MODEL_NAME]
-    recent_prices = data.history(context.security, 'price', context.history_range, '1d').values
-    recent_volume = data.history(context.security, 'volume', context.history_range, '1d').values
-    recent_high = data.history(context.security, 'high', context.history_range, '1d').values
-    recent_low = data.history(context.security, 'low', context.history_range, '1d').values
-    test_, _ = getTrainingWindow(recent_high, recent_low, recent_prices, recent_volume)
-    y = np.delete(_, 0, 1)
-    y = np.ravel(y)
-    X_normalized_ = preprocessing.normalize(test_, norm='l2')
-    sc = preprocessing.MinMaxScaler()
-    sc.fit(X_normalized_)
-    X_std = sc.transform(X_normalized_)
-    # feature selection to input features (context.n_components)
-    X_new = SelectKBest(chi2, k=context.n_components).fit_transform(X_std, y)
-    X_test = X_new[-1, :]
 
-    for stock in context.portfolio.positions:
-        print(context.portfolio.positions[stock].amount)
-    if not context.orders_submitted:
-        order(context.security, 10000)
-        print('Initial orders submitted')
-        context.orders_submitted = True
-    try:
-        if model:  # Check if our model is generated
-            # Predict using our model and the recent prices
-            X_test_ = X_test.reshape(1, -1)
-            prediction = model.predict(X_test_)
-            prediction_accuracy = model.predict(X_new[-10:, :])  # predict in past 10 days
-            accuracy = accuracy_score(np.ravel(np.delete(_, 0, 1))[-10:], prediction_accuracy)
-            print('Accuracy: %.2f' % accuracy)
-            record(accuracy=accuracy)
-            # print(prediction," x_test: ",X_test)
-            record(prediction=prediction)
-            decision_order = prediction[0]
-            order_target_percent(context.security, decision_order)
-    except Exception as error:
-        print('Caught this error: ' + repr(error))
-
-    """        
-    if context.model1: # Check if our model is generated
-
-        # Predict using our model and the recent prices
-        prediction = context.model1.predict(X_test)
-        record(prediction = prediction)
-
-        # Go long if we predict the price will rise, short otherwise
-        if prediction == 1:
-            order_target_percent(context.security, 1.0)
-        elif prediction == 0:
-            order_target_percent(context.security, 0.0)
-        else:
-            order_target_percent(context.security, -1.0)
-    """
 
 """
 QUERY_URL_JSON = "https://www.alphavantage.co/query?function={REQUEST_TYPE}&outputsize=full&datatype=csv&apikey={KEY}&symbol={SYMBOL}"
@@ -428,57 +546,15 @@ dataframe_ = pd.read_csv(StringIO(csv_))
 print(dataframe_)
 """
 
-test_string = ['AAPL', 'ABT', 'ACN', 'ADBE', 'AAP', 'AET', 'AMG', 'ARE', 'AKAM', 'AGN', 'ADS', 'MO', 'AEE', 'AEP', 'AIG',
-                   'AMP', 'AME', 'APH', 'ADI', 'APA', 'AMAT', 'AIZ', 'ADSK', 'AZO', 'AVB', 'BLL', 'BK', 'BAX', 'BDX', 'BRK.B',
-                   'HRB', 'BWA', 'BSX', 'CHRW', 'COG', 'CPB', 'CAH', 'KMX', 'CAT', 'CBS', 'CNP', 'CERN', 'SCHW', 'CVX', 'CB', 'XEC',
-                   'CTAS', 'C', 'CLX', 'CMS', 'KO', 'CTSH', 'CMCSA', 'CAG', 'ED', 'GLW', 'CCI', 'CMI', 'DHI', 'DRI', 'DE', 'XRAY',
-                   'DISCA', 'DLTR', 'DOV', 'DTE', 'DUK', 'ETFC', 'ETN', 'EIX', 'EA', 'EMR', 'ETR', 'EQT', 'EQIX', 'ESS', 'ES', 'EXPE',
-                   'ESRX', 'FFIV', 'FAST', 'FIS', 'FE', 'FLIR', 'FLR', 'FTI', 'BEN', 'GPS', 'GD', 'GGP', 'GPC', 'GILD', 'GT', 'GWW', 'HBI',
-                   'HRS', 'HAS', 'HCP', 'HP', 'HPQ', 'HON', 'HST', 'HUM', 'ITW', 'INTC', 'IBM', 'IPG', 'INTU', 'IVZ', 'JEC', 'JNJ', 'JPM',
-                   'KSU', 'KEY', 'KMB', 'KLAC', 'KR', 'LLL', 'LRCX', 'LEG', 'LUK', 'LNC', 'LMT', 'LOW', 'MTB', 'M', 'MRO', 'MAR', 'MLM', 'MA',
-                   'MKC', 'MCK', 'MDT', 'MET', 'MCHP', 'MSFT', 'TAP', 'MON', 'MCO', 'MOS', 'MYL', 'NOV', 'NTAP', 'NWL', 'NEM', 'NEE', 'NKE', 'NBL',
-                   'NSC', 'NOC', 'NUE', 'ORLY', 'OMC', 'ORCL', 'PCAR', 'PH', 'PAYX', 'PBCT', 'PEP', 'PRGO', 'PCG', 'PNW', 'PNC', 'PPG', 'PX', 'PCLN',
-                   'PG', 'PLD', 'PEG', 'PHM', 'PWR', 'DGX', 'RTN', 'RHT', 'RF', 'RHI', 'COL', 'ROST', 'CRM', 'SCG', 'STX', 'SRE', 'SPG', 'SLG', 'SNA',
-                   'LUV', 'SWK', 'SBUX', 'STT', 'SYK', 'SYMC', 'TROW', 'TXN', 'HSY', 'TMO', 'TWX', 'TJX', 'TSS', 'TSN', 'VLO', 'VTR', 'VZ', 'VIAB', 'VNO',
-                   'WMT', 'DIS', 'WAT', 'WFC', 'WY', 'WMB', 'WYN', 'XEL', 'XLNX', 'YUM', 'ZION',
-                   'AES', 'AFL', 'APD', 'ALXN', 'ALL', 'AMZN', 'AXP', 'ABC', 'APC', 'AIV', 'T', 'AVY', 'BAC', 'BBT', 'BBY', 'BA',
-                   'BMY', 'CA', 'COF', 'CCL', 'CELG', 'CF', 'CMG', 'CINF', 'CTXS', 'CMA', 'COP', 'STZ', 'CSX', 'DHR', 'DVN', 'D',
-                   'EMN', 'EW', 'EOG', 'EQR', 'EXC', 'XOM', 'FDX', 'FISV', 'FMC', 'FCX', 'GRMN', 'GIS', 'GS', 'HAL', 'HIG', 'HCN',
-                   'HD', 'HBAN', 'ICE', 'IFF', 'IRM', 'JCI', 'JNPR', 'KIM', 'KSS', 'LH', 'LEN', 'LLY', 'MAC', 'MMC', 'MAT', 'MRK',
-                   'MU', 'MDLZ', 'MS', 'NDAQ', 'NFLX', 'NI', 'JWN', 'NRG', 'OXY', 'PDCO', 'PKI', 'PXD', 'RL', 'PFG', 'PRU', 'PVH',
-                   'QCOM', 'O', 'RSG', 'ROK', 'SLB', 'SEE', 'SWKS', 'SO', 'SRCL', 'SYY', 'TXT', 'TIF', 'TMK', 'VAR', 'VRTX', 'VMC',
-                   'WM', 'WDC', 'WEC', 'XRX', 'ZBH',
-                   'A', 'AAL', 'AMGN', 'ADM', 'BXP', 'HSIC', 'CTL', 'CI', 'CME', 'COST', 'DVA', 'EBAY', 'EFX', 'EXPD', 'FITB', 'FLS', 'GE', 'GOOGL',
-                   'HOG', 'HES', 'IR', 'ISRG', 'K', 'MAS', 'MHK', 'MSI', 'NFX', 'NTRS', 'OKE', 'PNR', 'PFE', 'PPL', 'PGR', 'RRC', 'ROP', 'SHW', 'STI', 'TRV', 'TSCO', 'VRSN', 'WBA', 'WYNN',
-                    'AMT', 'AON', 'CBG', 'CSCO', 'CVS', 'EL', 'F', 'HRL', 'IP', 'MCD', 'MNST', 'NVDA', 'PSA', 'REGN', 'SJM', 'TGT', 'ANTM', 'XL',
-                    'ADP', 'CHK', 'JBHT','CL', 'ECL', 'L','LB','WHR'
-                   ]
 
 
-start = pd.to_datetime('2009-01-01').tz_localize('US/Eastern')
-end = pd.to_datetime('2018-12-01').tz_localize('US/Eastern')
+
+start = pd.to_datetime('2016-01-01').tz_localize('US/Eastern')
+end = pd.to_datetime('2018-01-01').tz_localize('US/Eastern')
 # Create algorithm object passing in initialize and
 # handle_data functions
-#['BAC', 'GNW', 'IPG', 'HOG', 'JPM', 'HCN', 'KSS', 'MDLZ']
-#['BAC', 'INTC', 'SPLS', 'PFE', 'HPQ', 'JPM', 'IPG', 'TROW']
+perf_manual = run_algorithm(start = start, end = end, capital_base = 10000000.0,  initialize=initialize, handle_data=rebalance, bundle = 'custom-na-csvdir-bundle')
 
-
-#test_string = ['HPQ']
-model_list = ['SVM','KNeighbors','DecisionTree','RandomForest','LogisticRegression']
-for ele in test_string:
-    SYMBOL = ele
-    if(os.path.isfile(('output_csv/'+SYMBOL+'_SVM_output.csv'))):
-        print('output_csv/'+SYMBOL+'_SVM_output.csv is exist')
-        continue
-    else:
-        print('output_csv/' + SYMBOL + '_SVM_output.csv is not exist')
-    for model_name in model_list:
-        MODEL_NAME = model_name
-        perf_manual = run_algorithm(start = start, end = end, capital_base = 10000000.0,  initialize=initialize, handle_data=rebalance, bundle = 'custom-na-csvdir-bundle')
-
-        # Print
-        perf_manual.to_csv('output/'+SYMBOL+'_'+MODEL_NAME+'_output.csv')
-
-
-
+# Print
+#perf_manual.to_csv(SYMBOL+'_output.csv')
 
